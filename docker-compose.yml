@@ -1,0 +1,12 @@
+version: '3'
+services:
+  api:
+    build:
+      context: ./
+    restart: unless-stopped
+    command: npm run start:prod
+    environment:
+      - VIRTUAL_HOST=smt.wandersouza.dev
+      - NODE_ENV=production
+    ports:
+      - "4000:4000"

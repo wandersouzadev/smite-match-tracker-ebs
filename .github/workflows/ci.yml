@@ -1,0 +1,52 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup NodeJS
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+          cache: npm
+      - name: Install dependencies
+        run: npm i
+      - name: Typescript build
+        run: npm run build
+      - name: Send dist folder to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          source: '*,!node_modules'
+          target: './projects/twitch-ext/smite-match-tracker/${{ github.event.repository.name }}'
+          rm: true
+      - name: Start app with PM2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.KEY }}
+          script: |
+            cd ~/projects/twitch-ext/smite-match-tracker/${{ github.event.repository.name }}
+            echo "===SETUP ENV FILE===="
+            echo -e 'NODE_ENV=${{ secrets.NODE_ENV }}
+            SMITE_API_URL=${{ secrets.SMITE_API_URL }}
+            HIREZ_DEV_ID=${{ secrets.HIREZ_DEV_ID }}
+            HIREZ_AUTH_KEY=${{ secrets.HIREZ_AUTH_KEY }}
+            TWITCH_API_URL=${{ secrets.TWITCH_API_URL }}
+            TWITCH_OAUTH_URL=${{ secrets.TWITCH_OAUTH_URL }}
+            TWITCH_KEY=${{ secrets.TWITCH_KEY }}
+            TWITCH_SECRET=${{ secrets.TWITCH_SECRET }}
+            TWITCH_CLIENT_ID=${{ secrets.TWITCH_CLIENT_ID }}
+            REDIS_HOST=${{ secrets.REDIS_HOST }}
+            REDIS_USER=${{ secrets.REDIS_USER }}
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            REDIS_PORT=${{ secrets.REDIS_PORT }}' > .env
+            echo "===SETUP ENV FILE===="
+            docker-compose up -d
