@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Controller,
-  Get,
-  Logger,
-  Query
-} from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { SmiteService } from './smite.service';
 
 @Controller('public/smite')
@@ -47,7 +41,6 @@ export class SmitePublicController {
 
   @Get('player')
   async getPlayer(@Query('account_name') accountName: string) {
-    Logger.debug(`call /player ${accountName}`);
     if (!accountName) {
       return new BadRequestException('Missing query param name');
     }
@@ -70,7 +63,7 @@ export class SmitePublicController {
       accountName
     );
     if (!playerStatus.Match) {
-      return new Error('This player is not in match');
+      return playerStatus.status_string;
     }
 
     return this.smiteApiService.getMatch(playerStatus.Match);

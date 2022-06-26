@@ -1,10 +1,10 @@
 import {
-    BadRequestException,
-    Controller,
-    Get,
-    Logger,
-    Query,
-    UseGuards
+  BadRequestException,
+  Controller,
+  Get,
+  Logger,
+  Query,
+  UseGuards
 } from '@nestjs/common';
 import { AuthService } from 'src/auth/auth.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
@@ -25,10 +25,13 @@ export class TwitchController {
   async getConfigurationService(
     @GetTwitchPayload() twitchUser: TwitchJwtTokenPayload
   ) {
-    return this.twitchService.getConfigurationSegment(
+    const segment = await this.twitchService.getConfigurationSegment(
       'broadcaster',
       twitchUser.channel_id
     );
+    Logger.debug('segment-RESPONSE');
+    console.log(segment);
+    return segment;
   }
 
   @Get('search/channel')

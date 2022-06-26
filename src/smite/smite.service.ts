@@ -1,12 +1,14 @@
 import { HttpService } from '@nestjs/axios';
 import { CACHE_MANAGER, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import { HirezSignature } from 'hirez-signature-ts';
+import HirezSignatureTs from 'hirez-signature-ts';
 import { HirezApiMethods } from 'hirez-signature-ts/lib/types';
 import { lastValueFrom, map } from 'rxjs';
+import { verifyMatchPlayers } from './helpers/verify-match-players';
 import { CreateSession } from './types/create-session';
 import { GetMatchPlayerDetails } from './types/get-mach-player-details';
 import { GetPlayer } from './types/get-player';
+import { GetPlayerByGamerTag } from './types/get-player-id-by-gamer-tag';
 import { GetPlayerStatus } from './types/get-player-status';
 import { SearchPlayers } from './types/search-player';
 
@@ -26,7 +28,8 @@ export class SmiteService {
     signature: string;
     timestamp: string;
   } {
-    return HirezSignature.createSignature({
+    Logger.debug('call create signature');
+    return HirezSignatureTs.createSignature({
       hirezDevId: this.hirezDevId,
       hirezAuthKey: this.hirezAuthKey,
       method
@@ -38,51 +41,47 @@ export class SmiteService {
     apiMethod: HirezApiMethods;
     query?: string;
   }): Promise<T> {
-    const cachedResult = await this.cacheManager.get(
-      `${args.apiMethod}-${args.query}`
-    );
-
-    if (cachedResult) {
-      return JSON.parse(cachedResult as string) as T;
-    }
-    const query = args?.query?.length ? `/${args.query}` : '';
-
-    const { signature, timestamp } = this.createSignature(args.apiMethod);
-    let session = await this.cacheManager.get('session_id');
-    if (!session) {
-      session = await this.createSession();
-      await this.cacheManager.set('session_id', session);
-    }
-    const data = await lastValueFrom(
-      this.httpService
-        .get<T | any>(
-          `/${args.apiMethod}${this.returnType}/${this.hirezDevId}/${signature}/${session}/${timestamp}${query}`
-        )
-        .pipe(map((response) => response.data))
-    );
-
-    if (data) {
-      await this.cacheManager.set(
-        `${args.apiMethod}-${args.query}`,
-        JSON.stringify(data),
-        {
-          ttl: this.cacheTime
-        }
+    try {
+      Logger.debug(`${this.hirezAuthKey} ${this.hirezDevId}`);
+      Logger.debug(
+        'SMITE API CALL method: ' + args.apiMethod + ' query: ' + args.query
       );
+      const query = args?.query?.length ? `/${args.query}` : '';
+
+      const { signature, timestamp } = this.createSignature(args.apiMethod);
+      let session = await this.cacheManager.get('session_id');
+      if (!session) {
+        session = await this.createSession();
+        await this.cacheManager.set('session_id', session);
+      }
+      return lastValueFrom(
+        this.httpService
+          .get<T | any>(
+            `/${args.apiMethod}${this.returnType}/${
+              this.hirezDevId
+            }/${signature}/${session}/${timestamp}${encodeURIComponent(query)}`
+          )
+          .pipe(map((response) => response.data))
+      );
+    } catch (error) {
+      Logger.error(error);
     }
-    return data;
   }
 
   //
   private createSession() {
-    const method = 'createsession';
-    const { signature, timestamp } = this.createSignature(method);
-    const request = this.httpService
-      .get<CreateSession>(
-        `/${method}${this.returnType}/${this.hirezDevId}/${signature}/${timestamp}`
-      )
-      .pipe(map((res) => res.data.session_id));
-    return lastValueFrom(request);
+    const method: HirezApiMethods = 'createsession';
+    try {
+      const { signature, timestamp } = this.createSignature(method);
+      const request = this.httpService
+        .get<CreateSession>(
+          `/${method}${this.returnType}/${this.hirezDevId}/${signature}/${timestamp}`
+        )
+        .pipe(map((res) => res.data.session_id));
+      return lastValueFrom(request);
+    } catch (error) {
+      Logger.error(error);
+    }
   }
 
   async ping(): Promise<string> {
@@ -112,43 +111,207 @@ export class SmiteService {
   }
 
   async searchAccounts(accountName: string) {
-    return this.smiteRestCall<SearchPlayers[]>({
-      apiMethod: 'searchplayers',
-      query: accountName
-    })
-      .then((accounts) => accounts.slice(0, 9))
-      .catch(Logger.error);
+    const method: HirezApiMethods = 'searchplayers';
+    try {
+      const cachedSearchResult = await this.cacheManager.get(
+        `${method}-${accountName}`
+      );
+      if (cachedSearchResult) {
+        return JSON.parse(String(cachedSearchResult)) as SearchPlayers;
+      }
+
+      const searchPlayersResponse = await this.smiteRestCall<SearchPlayers[]>({
+        apiMethod: method,
+        query: accountName
+      });
+
+      const accounts = searchPlayersResponse.slice(0, 9);
+      await this.cacheManager.set(
+        `${method}-${accountName}`,
+        JSON.stringify(accounts),
+        { ttl: 60 * 60 }
+      );
+
+      return accounts;
+    } catch (error) {
+      Logger.error(error);
+    }
   }
 
-  async getPlayer(accountName: string) {
-    return this.smiteRestCall<GetPlayer[]>({
-      apiMethod: 'getplayer',
-      query: accountName
-    })
-      .then((playerInfo) => playerInfo.shift())
-      .catch(Logger.error);
+  async getPlayerInfoByGamerTag(accountName: string, portalId: string) {
+    const method: HirezApiMethods = 'getplayeridsbygamertag';
+    try {
+      const cachedPlayerData = await this.cacheManager.get(
+        `${method}-${accountName}-${portalId}`
+      );
+      if (cachedPlayerData) {
+        return JSON.parse(String(cachedPlayerData)) as GetPlayerByGamerTag;
+      }
+
+      const getPlayerIdByGamerTagResponse = await this.smiteRestCall<
+        GetPlayerByGamerTag[]
+      >({
+        apiMethod: method,
+        query: `${portalId}/${accountName}`
+      });
+
+      const playerInfo = getPlayerIdByGamerTagResponse.shift();
+      Logger.debug('before');
+      Logger.debug(playerInfo);
+
+      await this.cacheManager.set(
+        `${method}-${accountName}-${portalId}`,
+        JSON.stringify(playerInfo),
+        { ttl: 60 * 60 }
+      );
+    } catch (error) {
+      Logger.error(error);
+    }
   }
 
-  async getPlayerWithPortal(playerName: string, portalId: string) {
-    return this.smiteRestCall<GetPlayer[]>({
-      apiMethod: 'getplayer',
-      query: `${playerName}/${portalId}`
-    })
-      .then((playerInfo) => playerInfo.shift())
-      .catch(Logger.error);
+  async getPlayerWithPortal(accountNameOrId: string, portalId: string) {
+    const method: HirezApiMethods = 'getplayer';
+    try {
+      const cachedPlayerData = await this.cacheManager.get(
+        `${method}-${accountNameOrId}-${portalId}`
+      );
+      if (cachedPlayerData) {
+        return JSON.parse(String(cachedPlayerData)) as GetPlayer;
+      }
+      const getPlayerWithPortalResponse = await this.smiteRestCall<GetPlayer[]>(
+        {
+          apiMethod: method,
+          query: `${accountNameOrId}`
+        }
+      );
+
+      const playerData = getPlayerWithPortalResponse.shift();
+
+      await this.cacheManager.set(
+        `${method}-${accountNameOrId}-${portalId}`,
+        JSON.stringify(playerData),
+        { ttl: 60 * 60 }
+      );
+
+      return playerData;
+    } catch (error) {
+      Logger.error(error);
+    }
+  }
+
+  async getPlayer(accountName: string | number) {
+    const method: HirezApiMethods = 'getplayer';
+    try {
+      const cachedPlayerData = await this.cacheManager.get(
+        `${method}-${accountName}`
+      );
+      if (cachedPlayerData) {
+        return JSON.parse(String(cachedPlayerData)) as GetPlayer;
+      }
+
+      const getPlayerResponse = await this.smiteRestCall<GetPlayer[]>({
+        apiMethod: method,
+        query: `${accountName}`
+      });
+
+      const playerData = getPlayerResponse.shift();
+
+      // player profile cache 1 hour //
+      await this.cacheManager.set(
+        `${method}-${accountName}`,
+        JSON.stringify(playerData),
+        { ttl: 60 * 60 }
+      );
+
+      return playerData;
+    } catch (error) {
+      Logger.error(error);
+    }
   }
 
   async getPlayerStatus(playerNameOrId: string | number) {
-    return this.smiteRestCall<GetPlayerStatus[]>({
-      apiMethod: 'getplayerstatus',
-      query: `${playerNameOrId}`
-    }).then((playerStatus) => playerStatus.shift());
+    const method: HirezApiMethods = 'getplayerstatus';
+    try {
+      const cachedPlayerStatus = await this.cacheManager.get(
+        `${method}-${playerNameOrId}`
+      );
+      if (cachedPlayerStatus) {
+        return JSON.parse(String(cachedPlayerStatus)) as GetPlayerStatus;
+      }
+      const getPlayerStatusResponse = await this.smiteRestCall<
+        GetPlayerStatus[]
+      >({
+        apiMethod: method,
+        query: `${playerNameOrId}`
+      });
+
+      const playerStatus = getPlayerStatusResponse.shift();
+
+      // player status cache 1 minute //
+      await this.cacheManager.set(
+        `${method}-${playerNameOrId}`,
+        JSON.stringify(playerStatus),
+        { ttl: 60 * 1 }
+      );
+
+      return playerStatus;
+    } catch (error) {
+      Logger.error(error);
+    }
   }
 
   async getMatch(matchId: number) {
-    return this.smiteRestCall<GetMatchPlayerDetails[]>({
-      apiMethod: 'getmatchplayerdetails',
-      query: `${matchId}`
-    });
+    const method: HirezApiMethods = 'getmatchplayerdetails';
+    try {
+      const cachedMatch = await this.cacheManager.get(`${method}-${matchId}`);
+      if (cachedMatch) {
+        return JSON.parse(String(cachedMatch)) as GetMatchPlayerDetails;
+      }
+      const getMatchResponse = await this.smiteRestCall<
+        GetMatchPlayerDetails[]
+      >({
+        apiMethod: method,
+        query: `${matchId}`
+      });
+
+      Logger.debug({
+        msg: 'FILA',
+        id: getMatchResponse[0].Queue
+      });
+      Logger.debug({
+        msg: 'TAMANHO DOS 2 TIMES',
+        length: getMatchResponse.length
+      });
+      const isCompleteTeam = verifyMatchPlayers(
+        getMatchResponse[0].Queue,
+        getMatchResponse
+      );
+
+      Logger.debug({
+        msg: 'isCompleteTeam',
+        value: isCompleteTeam
+      });
+
+      // if player DC lower cache time to try find player
+      if (!isCompleteTeam) {
+        await this.cacheManager.set(
+          `${method}-${matchId}`,
+          JSON.stringify(getMatchResponse),
+          { ttl: 60 * 1 }
+        );
+        return getMatchResponse;
+      }
+
+      // matches with 2 hour cache
+      await this.cacheManager.set(
+        `${method}-${matchId}`,
+        JSON.stringify(getMatchResponse),
+        { ttl: 60 * 130 }
+      );
+
+      return getMatchResponse;
+    } catch (error) {
+      Logger.log(error);
+    }
   }
 }

@@ -5,15 +5,11 @@ import {
   Logger,
   Query
 } from '@nestjs/common';
-import { AuthService } from 'src/auth/auth.service';
 import { TwitchService } from './twitch.service';
 
 @Controller('public-api/twitch')
 export class TwitchController {
-  constructor(
-    private readonly twitchService: TwitchService,
-    private readonly authService: AuthService
-  ) {}
+  constructor(private readonly twitchService: TwitchService) {}
 
   async getChannel(@Query('broadcaster_id') channelId: string) {
     Logger.log(channelId);

@@ -20,19 +20,24 @@ export class TwitchService {
     url: string;
     params?: any;
     token?: string;
+    segmentToken?: string;
   }): Promise<T> {
     let cachedToken = await this.cacheManager.get('twitch_app_access_token');
     if (!cachedToken) {
+      Logger.debug('no token');
+      Logger.debug(args.token);
       cachedToken = await this.getAccessToken();
+      Logger.debug(cachedToken);
+      Logger.debug('dle');
     }
     return lastValueFrom(
       this.httpService
         .request<T | any>({
           method: args.method as any,
-          url: args.url,
+          url: `${process.env.TWITCH_API_URL}${args.url}`,
           params: args.params,
           headers: {
-            Authorization: `Bearer ${args.token ?? cachedToken}`,
+            Authorization: `Bearer ${args.segmentToken || cachedToken}`,
             'Client-Id': process.env.TWITCH_CLIENT_ID
           }
         })
@@ -43,17 +48,20 @@ export class TwitchService {
   private async getAccessToken(): Promise<OauthAuthorize> {
     const oauthResponse = await lastValueFrom(
       this.httpService
-        .post(process.env.TWITCH_OAUTH_URL, {
+        .request({
+          method: 'POST',
+          url: 'https://id.twitch.tv/oauth2/token',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded'
+          },
           params: {
             client_id: process.env.TWITCH_CLIENT_ID,
             client_secret: process.env.TWITCH_SECRET,
             grant_type: 'client_credentials'
-          },
-          headers: {
-            'content-type': 'application/x-www-form-urlencoded'
           }
         })
-        .pipe(map((response) => response.data.data))
+
+        .pipe(map((response) => response.data))
     );
     await this.cacheManager.set(
       'twitch_app_access_token',
@@ -74,14 +82,16 @@ export class TwitchService {
       }
     });
   }
-  async getUser(userId: string): Promise<GetUser> {
+  async getUser(userId: string) {
     return this.twitchCall<GetUser[]>({
       method: 'GET',
       url: '/users',
       params: {
         id: userId
       }
-    }).then((user) => user[0]);
+    })
+      .then((user) => user[0])
+      .catch(Logger.error);
   }
 
   async getConfigurationSegment(
@@ -92,6 +102,8 @@ export class TwitchService {
       user_id: broadcasterId,
       role: 'external'
     });
+    Logger.debug(token);
+    Logger.debug(broadcasterId);
     return this.twitchCall<GetConfigurationSegment[]>({
       method: 'GET',
       url: '/extensions/configurations',
@@ -100,7 +112,7 @@ export class TwitchService {
         broadcaster_id: broadcasterId,
         segment
       },
-      token
+      segmentToken: token
     })
       .then((response) => response.shift())
       .catch(Logger.error);

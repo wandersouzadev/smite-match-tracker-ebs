@@ -1,12 +1,14 @@
 version: '3'
 services:
   api:
-    build:
-      context: ./
+    image: wandersouza/smite-match-tracker-ebs:1.0.0
     restart: unless-stopped
-    command: npm run start:prod
     environment:
-      - VIRTUAL_HOST=smt.wandersouza.dev
-      - NODE_ENV=production
-    ports:
-      - "4000:4000"
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      - NODE_ENV=${NODE_ENV}
+    env_file:
+      - ./.env
+networks:
+  default:
+    name: nginx-proxy
+    external: true

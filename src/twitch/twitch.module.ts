@@ -6,13 +6,7 @@ import { TwitchController } from './twitch.controller';
 import { TwitchService } from './twitch.service';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot(),
-    AuthModule,
-    HttpModule.register({
-      baseURL: process.env.TWITCH_API_URL
-    })
-  ],
+  imports: [ConfigModule.forRoot(), AuthModule, HttpModule],
   providers: [TwitchService],
   controllers: [TwitchController],
   exports: [TwitchService]

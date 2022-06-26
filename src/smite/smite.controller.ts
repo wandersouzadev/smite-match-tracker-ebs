@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  InternalServerErrorException,
   Logger,
   Query,
   UseGuards
@@ -40,18 +41,71 @@ export class SmiteController {
     return accounts;
   }
 
-  @Get('player')
-  async getPlayer(@Query('name') playerName: string) {
-    if (!playerName) {
-      return new BadRequestException('Missing query param name');
-    }
-    const player = await this.smiteApiService.getPlayerWithPortal(
-      encodeURIComponent(playerName),
-      '1'
+  @Get('player/@me')
+  async getStreamerPlayer(
+    @GetTwitchPayload() twitchPayload: TwitchJwtTokenPayload
+  ) {
+    const broadcasterSegment = await this.twitchService.getConfigurationSegment(
+      'broadcaster',
+      twitchPayload.channel_id
     );
 
+    if (!broadcasterSegment) {
+      return;
+    }
+
+    if (!broadcasterSegment?.content) {
+      return;
+    }
+
+    const smiteAccounts: Partial<GetPlayer[]> = JSON.parse(
+      broadcasterSegment.content
+    );
+    const mainAccount = smiteAccounts.shift();
+
+    const playerData = await this.smiteApiService.getPlayer(mainAccount.Id);
+
+    if (!playerData) {
+      throw new InternalServerErrorException();
+    }
+
+    return playerData;
+  }
+
+  @Get('player')
+  async getPlayer(
+    @Query('account_name') accountName: string,
+    @Query('portal_id') portalId?: string
+  ) {
+    Logger.debug({ accountName, portalId });
+    if (!accountName) {
+      throw new BadRequestException('Missing param account_name');
+    }
+
+    let player: GetPlayer;
+
+    if (portalId) {
+      Logger.debug('have portalId!!!');
+      const playerInfo = await this.smiteApiService.getPlayerInfoByGamerTag(
+        accountName,
+        portalId
+      );
+      Logger.debug('playerInfo-by-gamer-tag response 🔽');
+      Logger.debug(playerInfo);
+      if (!playerInfo) {
+        throw new BadRequestException('player not found');
+      }
+      player = await this.smiteApiService.getPlayerWithPortal(
+        playerInfo.player_id.toString(),
+        playerInfo.portal_id.toString()
+      );
+    } else {
+      Logger.debug('else else');
+      player = await this.smiteApiService.getPlayer(accountName);
+    }
+
     if (!player) {
-      throw new BadRequestException('player not found');
+      throw new BadRequestException('Player not found');
     }
     return player;
   }
@@ -63,8 +117,6 @@ export class SmiteController {
 
   @Get('live-match')
   async getMatch(@GetTwitchPayload() twitchPayload: TwitchJwtTokenPayload) {
-    Logger.debug('call live-match');
-
     const broadcasterSegment = await this.twitchService.getConfigurationSegment(
       'broadcaster',
       twitchPayload.channel_id
@@ -74,7 +126,9 @@ export class SmiteController {
       return;
     }
 
-    Logger.log(broadcasterSegment);
+    if (!broadcasterSegment?.content) {
+      return;
+    }
 
     const smiteAccounts: Partial<GetPlayer[]> = JSON.parse(
       broadcasterSegment.content
@@ -85,13 +139,9 @@ export class SmiteController {
       mainAccount.Id
     );
 
-    Logger.debug(playerStatus);
-
     if (!playerStatus.Match) {
       return playerStatus.status_string;
     }
-
-    Logger.log(playerStatus);
 
     const teamsData = await this.smiteApiService.getMatch(playerStatus.Match);
 
