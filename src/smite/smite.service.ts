@@ -6,6 +6,7 @@ import { HirezApiMethods } from 'hirez-signature-ts/lib/types';
 import { lastValueFrom, map } from 'rxjs';
 import { verifyMatchPlayers } from './helpers/verify-match-players';
 import { CreateSession } from './types/create-session';
+import { GetGodRanks } from './types/get-god-ranks';
 import { GetMatchPlayerDetails } from './types/get-mach-player-details';
 import { GetPlayer } from './types/get-player';
 import { GetPlayerByGamerTag } from './types/get-player-id-by-gamer-tag';
@@ -129,7 +130,7 @@ export class SmiteService {
       await this.cacheManager.set(
         `${method}-${accountName}`,
         JSON.stringify(accounts),
-        { ttl: 60 * 60 }
+        { ttl: 60 * 5 }
       );
 
       return accounts;
@@ -159,10 +160,11 @@ export class SmiteService {
       Logger.debug('before');
       Logger.debug(playerInfo);
 
+      // player 5 minutes cache
       await this.cacheManager.set(
         `${method}-${accountName}-${portalId}`,
         JSON.stringify(playerInfo),
-        { ttl: 60 * 60 }
+        { ttl: 60 * 5 }
       );
     } catch (error) {
       Logger.error(error);
@@ -187,10 +189,11 @@ export class SmiteService {
 
       const playerData = getPlayerWithPortalResponse.shift();
 
+      // player 5 minutes cache
       await this.cacheManager.set(
         `${method}-${accountNameOrId}-${portalId}`,
         JSON.stringify(playerData),
-        { ttl: 60 * 60 }
+        { ttl: 60 * 5 }
       );
 
       return playerData;
@@ -199,11 +202,11 @@ export class SmiteService {
     }
   }
 
-  async getPlayer(accountName: string | number) {
+  async getPlayer(accountNameOrId: string | number) {
     const method: HirezApiMethods = 'getplayer';
     try {
       const cachedPlayerData = await this.cacheManager.get(
-        `${method}-${accountName}`
+        `${method}-${accountNameOrId}`
       );
       if (cachedPlayerData) {
         return JSON.parse(String(cachedPlayerData)) as GetPlayer;
@@ -211,16 +214,16 @@ export class SmiteService {
 
       const getPlayerResponse = await this.smiteRestCall<GetPlayer[]>({
         apiMethod: method,
-        query: `${accountName}`
+        query: `${accountNameOrId}`
       });
 
       const playerData = getPlayerResponse.shift();
 
-      // player profile cache 1 hour //
+      // player profile cache 5 minutes //
       await this.cacheManager.set(
-        `${method}-${accountName}`,
+        `${method}-${accountNameOrId}`,
         JSON.stringify(playerData),
-        { ttl: 60 * 60 }
+        { ttl: 60 * 5 }
       );
 
       return playerData;
@@ -247,11 +250,11 @@ export class SmiteService {
 
       const playerStatus = getPlayerStatusResponse.shift();
 
-      // player status cache 1 minute //
+      // player status cache 10 secs //
       await this.cacheManager.set(
         `${method}-${playerNameOrId}`,
         JSON.stringify(playerStatus),
-        { ttl: 60 * 1 }
+        { ttl: 10 }
       );
 
       return playerStatus;
@@ -265,7 +268,7 @@ export class SmiteService {
     try {
       const cachedMatch = await this.cacheManager.get(`${method}-${matchId}`);
       if (cachedMatch) {
-        return JSON.parse(String(cachedMatch)) as GetMatchPlayerDetails;
+        return JSON.parse(String(cachedMatch)) as GetMatchPlayerDetails[];
       }
       const getMatchResponse = await this.smiteRestCall<
         GetMatchPlayerDetails[]
@@ -312,6 +315,62 @@ export class SmiteService {
       return getMatchResponse;
     } catch (error) {
       Logger.log(error);
+    }
+  }
+
+  async getGodRanks(accountNameOrId: string | number) {
+    const method: HirezApiMethods = 'getgodranks';
+    try {
+      const cachedPlayerGodRanks = await this.cacheManager.get(
+        `${method}-${accountNameOrId}`
+      );
+      if (cachedPlayerGodRanks) {
+        return JSON.parse(String(cachedPlayerGodRanks)) as GetGodRanks[];
+      }
+
+      const getGodRanksResponse = await this.smiteRestCall<GetGodRanks[]>({
+        apiMethod: method,
+        query: `${accountNameOrId}`
+      });
+
+      // player god ranks cache 10 minutes //
+      await this.cacheManager.set(
+        `${method}-${accountNameOrId}`,
+        JSON.stringify(getGodRanksResponse),
+        { ttl: 60 * 10 }
+      );
+
+      return getGodRanksResponse;
+    } catch (error) {
+      Logger.error(error);
+    }
+  }
+
+  async getMatchHistory(accountNameOrId: string | number) {
+    const method: HirezApiMethods = 'getmatchhistory';
+    try {
+      const cachedPlayerHistory = await this.cacheManager.get(
+        `${method}-${accountNameOrId}`
+      );
+      if (cachedPlayerHistory) {
+        return JSON.parse(String(cachedPlayerHistory)) as GetGodRanks[];
+      }
+
+      const getPlayerHistoryResponse = await this.smiteRestCall<GetGodRanks[]>({
+        apiMethod: method,
+        query: `${accountNameOrId}`
+      });
+
+      // player match history cache 10 minutes //
+      await this.cacheManager.set(
+        `${method}-${accountNameOrId}`,
+        JSON.stringify(getPlayerHistoryResponse),
+        { ttl: 60 * 10 }
+      );
+
+      return getPlayerHistoryResponse;
+    } catch (error) {
+      Logger.error(error);
     }
   }
 }

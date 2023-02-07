@@ -11,6 +11,8 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { TwitchJwtTokenPayload } from 'src/auth/types/jwt-payload';
 import { GetTwitchPayload } from 'src/shared/user.decorator';
 import { TwitchService } from 'src/twitch/twitch.service';
+import { isRankedMatch } from './helpers/is-ranked-match';
+import { mapAdditionalRankedPlayerInfo } from './helpers/map-additional-ranked-info';
 import { SmiteService } from './smite.service';
 import { GetPlayer } from './types/get-player';
 
@@ -58,10 +60,10 @@ export class SmiteController {
       return;
     }
 
-    const smiteAccounts: Partial<GetPlayer[]> = JSON.parse(
+    const parsedBroadcasterSegment: Partial<GetPlayer[]> = JSON.parse(
       broadcasterSegment.content
     );
-    const mainAccount = smiteAccounts.shift();
+    const mainAccount = parsedBroadcasterSegment.shift();
 
     const playerData = await this.smiteApiService.getPlayer(mainAccount.Id);
 
@@ -130,10 +132,10 @@ export class SmiteController {
       return;
     }
 
-    const smiteAccounts: Partial<GetPlayer[]> = JSON.parse(
+    const parsedBroadcasterSegment: Partial<GetPlayer[]> = JSON.parse(
       broadcasterSegment.content
     );
-    const mainAccount = smiteAccounts.shift();
+    const mainAccount = parsedBroadcasterSegment.shift();
 
     const playerStatus = await this.smiteApiService.getPlayerStatus(
       mainAccount.Id
@@ -143,13 +145,102 @@ export class SmiteController {
       return playerStatus.status_string;
     }
 
-    const teamsData = await this.smiteApiService.getMatch(playerStatus.Match);
+    let teamsData = await this.smiteApiService.getMatch(playerStatus.Match);
 
+    if (!isRankedMatch(playerStatus.match_queue_id)) {
+      teamsData = await Promise.all(
+        teamsData.map(async (matchPlayerData) => {
+          if (matchPlayerData.playerId !== '0') {
+            const playerData = await this.smiteApiService.getPlayer(
+              matchPlayerData.playerId
+            );
+
+            return mapAdditionalRankedPlayerInfo(
+              playerStatus.match_queue_id,
+              matchPlayerData,
+              playerData
+            );
+          } else {
+            return matchPlayerData;
+          }
+        })
+      );
+    }
+    Logger.debug('TEAMS!!!!');
+    Logger.debug(teamsData);
     return {
       accountId: String(mainAccount.Id),
       queueId: String(playerStatus.match_queue_id),
       status: playerStatus.status_string,
       teamsData
     };
+  }
+
+  @Get('player-gods-ranks/@me')
+  async getStreamerGodRanks(
+    @GetTwitchPayload() twitchPayload: TwitchJwtTokenPayload
+  ) {
+    const broadcasterSegment = await this.twitchService.getConfigurationSegment(
+      'broadcaster',
+      twitchPayload.channel_id
+    );
+
+    Logger.debug('call get player gods');
+
+    if (!broadcasterSegment) {
+      return;
+    }
+
+    if (!broadcasterSegment?.content) {
+      return;
+    }
+
+    const parsedBroadcasterSegment: Partial<GetPlayer[]> = JSON.parse(
+      broadcasterSegment.content
+    );
+    const mainAccount = parsedBroadcasterSegment.shift();
+
+    const playerData = await this.smiteApiService.getGodRanks(mainAccount.Id);
+
+    if (!playerData) {
+      throw new InternalServerErrorException();
+    }
+
+    return playerData;
+  }
+
+  @Get('player-history/@me')
+  async getStreamerHistory(
+    @GetTwitchPayload() twitchPayload: TwitchJwtTokenPayload
+  ) {
+    const broadcasterSegment = await this.twitchService.getConfigurationSegment(
+      'broadcaster',
+      twitchPayload.channel_id
+    );
+
+    Logger.debug('call get player history');
+
+    if (!broadcasterSegment) {
+      return;
+    }
+
+    if (!broadcasterSegment?.content) {
+      return;
+    }
+
+    const parsedBroadcasterSegment: Partial<GetPlayer[]> = JSON.parse(
+      broadcasterSegment.content
+    );
+    const mainAccount = parsedBroadcasterSegment.shift();
+
+    const playerHistory = await this.smiteApiService.getMatchHistory(
+      mainAccount.Id
+    );
+
+    if (!playerHistory) {
+      throw new InternalServerErrorException();
+    }
+
+    return playerHistory;
   }
 }
