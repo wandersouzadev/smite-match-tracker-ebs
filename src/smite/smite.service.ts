@@ -1,8 +1,10 @@
 import { HttpService } from '@nestjs/axios';
 import { CACHE_MANAGER, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
-import HirezSignatureTs from 'hirez-signature-ts';
-import { HirezApiMethods } from 'hirez-signature-ts/lib/types';
+import {
+  HirezSignatureHelper,
+  HirezApiMethodName
+} from 'hirez-signature-helper';
 import { lastValueFrom, map } from 'rxjs';
 import { verifyMatchPlayers } from './helpers/verify-match-players';
 import { CreateSession } from './types/create-session';
@@ -25,21 +27,25 @@ export class SmiteService {
   ) {}
 
   //
-  private createSignature(method: HirezApiMethods): {
+  private createSignature(method: HirezApiMethodName): {
     signature: string;
     timestamp: string;
   } {
     Logger.debug('call create signature');
-    return HirezSignatureTs.createSignature({
-      hirezDevId: this.hirezDevId,
-      hirezAuthKey: this.hirezAuthKey,
+    const signedMethod = HirezSignatureHelper.createSignature({
+      devId: this.hirezDevId,
+      authKey: this.hirezAuthKey,
       method
     });
+    return {
+      signature: signedMethod.md5,
+      timestamp: signedMethod.timestamp
+    };
   }
 
   //
   private async smiteRestCall<T>(args: {
-    apiMethod: HirezApiMethods;
+    apiMethod: HirezApiMethodName;
     query?: string;
   }): Promise<T> {
     try {
@@ -71,7 +77,7 @@ export class SmiteService {
 
   //
   private createSession() {
-    const method: HirezApiMethods = 'createsession';
+    const method: HirezApiMethodName = 'createsession';
     try {
       const { signature, timestamp } = this.createSignature(method);
       const request = this.httpService
@@ -112,7 +118,7 @@ export class SmiteService {
   }
 
   async searchAccounts(accountName: string) {
-    const method: HirezApiMethods = 'searchplayers';
+    const method: HirezApiMethodName = 'searchplayers';
     try {
       const cachedSearchResult = await this.cacheManager.get(
         `${method}-${accountName}`
@@ -140,7 +146,7 @@ export class SmiteService {
   }
 
   async getPlayerInfoByGamerTag(accountName: string, portalId: string) {
-    const method: HirezApiMethods = 'getplayeridsbygamertag';
+    const method: HirezApiMethodName = 'getplayeridsbygamertag';
     try {
       const cachedPlayerData = await this.cacheManager.get(
         `${method}-${accountName}-${portalId}`
@@ -172,7 +178,7 @@ export class SmiteService {
   }
 
   async getPlayerWithPortal(accountNameOrId: string, portalId: string) {
-    const method: HirezApiMethods = 'getplayer';
+    const method: HirezApiMethodName = 'getplayer';
     try {
       const cachedPlayerData = await this.cacheManager.get(
         `${method}-${accountNameOrId}-${portalId}`
@@ -203,7 +209,7 @@ export class SmiteService {
   }
 
   async getPlayer(accountNameOrId: string | number) {
-    const method: HirezApiMethods = 'getplayer';
+    const method: HirezApiMethodName = 'getplayer';
     try {
       const cachedPlayerData = await this.cacheManager.get(
         `${method}-${accountNameOrId}`
@@ -233,7 +239,7 @@ export class SmiteService {
   }
 
   async getPlayerStatus(playerNameOrId: string | number) {
-    const method: HirezApiMethods = 'getplayerstatus';
+    const method: HirezApiMethodName = 'getplayerstatus';
     try {
       const cachedPlayerStatus = await this.cacheManager.get(
         `${method}-${playerNameOrId}`
@@ -264,7 +270,7 @@ export class SmiteService {
   }
 
   async getMatch(matchId: number) {
-    const method: HirezApiMethods = 'getmatchplayerdetails';
+    const method: HirezApiMethodName = 'getmatchplayerdetails';
     try {
       const cachedMatch = await this.cacheManager.get(`${method}-${matchId}`);
       if (cachedMatch) {
@@ -319,7 +325,7 @@ export class SmiteService {
   }
 
   async getGodRanks(accountNameOrId: string | number) {
-    const method: HirezApiMethods = 'getgodranks';
+    const method: HirezApiMethodName = 'getgodranks';
     try {
       const cachedPlayerGodRanks = await this.cacheManager.get(
         `${method}-${accountNameOrId}`
@@ -347,7 +353,7 @@ export class SmiteService {
   }
 
   async getMatchHistory(accountNameOrId: string | number) {
-    const method: HirezApiMethods = 'getmatchhistory';
+    const method: HirezApiMethodName = 'getmatchhistory';
     try {
       const cachedPlayerHistory = await this.cacheManager.get(
         `${method}-${accountNameOrId}`
