@@ -3,6 +3,7 @@ import { CACHE_MANAGER, Inject, Injectable, Logger } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 import { lastValueFrom, map } from 'rxjs';
 import { AuthService } from 'src/auth/auth.service';
+import { BroadcasterSettings } from './types/broadcaster-settings';
 import { GetChannelInformation } from './types/get-channel-information';
 import { GetConfigurationSegment } from './types/get-configuration-segment';
 import { GetUser } from './types/get-user';
@@ -116,5 +117,30 @@ export class TwitchService {
     })
       .then((response) => response.shift())
       .catch(Logger.error);
+  }
+
+  async getBroadcasterSettings(twitchChannelId: string) {
+    try {
+      const response = await this.cacheManager.get<string>(
+        `streamer-${twitchChannelId}-settings`
+      );
+      return JSON.parse(response) as BroadcasterSettings;
+    } catch (error) {
+      Logger.error;
+    }
+  }
+  async setBroadcasterSettings(
+    twitchChannelId: string,
+    settings: BroadcasterSettings
+  ) {
+    try {
+      await this.cacheManager.set(
+        `streamer-${twitchChannelId}-settings`,
+        JSON.stringify(settings),
+        { ttl: 0 }
+      );
+    } catch (error) {
+      Logger.error;
+    }
   }
 }

@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  Body,
   Controller,
   Get,
   Logger,
+  Post,
   Query,
   UseGuards
 } from '@nestjs/common';
@@ -11,6 +13,7 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { TwitchJwtTokenPayload } from 'src/auth/types/jwt-payload';
 import { GetTwitchPayload } from 'src/shared/user.decorator';
 import { TwitchService } from './twitch.service';
+import { BroadcasterSettings } from './types/broadcaster-settings';
 
 @UseGuards(JwtAuthGuard)
 @Controller('twitch')
@@ -20,7 +23,32 @@ export class TwitchController {
     private readonly authService: AuthService
   ) {}
 
-  @UseGuards(JwtAuthGuard)
+  @Get('configuration/settings')
+  async getBroadcasterSettings(
+    @GetTwitchPayload() twitchUser: TwitchJwtTokenPayload
+  ) {
+    Logger.log('call get config');
+    Logger.log(twitchUser);
+    return await this.twitchService.getBroadcasterSettings(
+      twitchUser.channel_id
+    );
+  }
+
+  @Post('configuration/settings')
+  async setBroadcasterSettings(
+    @GetTwitchPayload() twitchUser: TwitchJwtTokenPayload,
+    @Body() settings: BroadcasterSettings
+  ) {
+    Logger.debug('call post config');
+    Logger.log(twitchUser);
+    Logger.log(settings);
+    await this.twitchService.setBroadcasterSettings(
+      twitchUser.channel_id,
+      settings
+    );
+    return settings;
+  }
+
   @Get('configuration/segment')
   async getConfigurationService(
     @GetTwitchPayload() twitchUser: TwitchJwtTokenPayload
