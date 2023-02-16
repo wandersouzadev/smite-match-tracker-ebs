@@ -1,6 +1,6 @@
 {
   "name": "smite-match-tracker-twitch-ebs",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Twitch extension backend for Smite Match Tracker",
   "author": "Wander Souza",
   "private": true,
@@ -34,7 +34,7 @@
     "cache-manager-redis-store": "^2.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.13.2",
-    "hirez-signature-helper": "^0.0.3",
+    "hirez-signature-helper": "^0.0.4",
     "passport": "^0.5.2",
     "passport-jwt": "^4.0.0",
     "passport-local": "^1.0.0",
